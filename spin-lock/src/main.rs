@@ -34,6 +34,7 @@ pub struct SpinLock<T> {
 
 // Impl sync for SpinLock where T is send
 // T impls send -> Can be safely sent to different threads
+// T being send is sufficient as T will only ever be mutably owned by a singular thread at a time
 // Implementing Sync -> Can safely be shared among threads
 unsafe impl<T> Sync for SpinLock<T> where T: Send {}
 
@@ -46,7 +47,9 @@ impl<T> SpinLock<T> {
     }
 
     pub fn lock(&self) -> Guard<T> {
+        // NOTE: Using a compare and exchange (CAS) here might be easier to reason about
         while self.lock.swap(true, Ordering::Acquire) {
+            // Informing the CPU that we're in a spin loop, allowing it to optimize accordingly
             std::hint::spin_loop()
         }
 
@@ -58,6 +61,7 @@ impl<T> SpinLock<T> {
     }
 }
 
+// Implementation of guard, that derefs to type T for easier usage
 pub struct Guard<'a, T> {
     lock: &'a SpinLock<T>,
 }
@@ -81,6 +85,7 @@ where
     }
 }
 
+// Unlocking the spinlock when the guard is dropped
 impl<T> Drop for Guard<'_, T> {
     fn drop(&mut self) {
         self.lock.lock.store(false, Ordering::Release)
