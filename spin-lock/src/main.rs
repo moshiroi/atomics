@@ -1,11 +1,13 @@
-mod lib;
-
 use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
     thread,
 };
+
+mod lib;
+
+use lib::SpinLock;
 
 fn main() {
     let spin_lock: &'static _ = Box::leak(Box::new(SpinLock::new(0)));
