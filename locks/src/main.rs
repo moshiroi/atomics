@@ -2,7 +2,6 @@ use std::thread;
 
 mod lib;
 
-use lib::mutex::Mutex;
 use lib::spin_lock::SpinLock;
 
 fn main() {

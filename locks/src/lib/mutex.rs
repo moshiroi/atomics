@@ -2,6 +2,7 @@ use std::{
     cell::UnsafeCell,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicU32, Ordering},
+    thread,
 };
 
 use atomic_wait::{wait, wake_one};
@@ -10,7 +11,7 @@ pub struct Mutex<T> {
     /// 0 - Unlocked
     /// 1 - Locked
     /// 2 - Threads waiting to Lock
-    state: AtomicU32,
+    pub state: AtomicU32,
     value: UnsafeCell<T>,
 }
 
@@ -32,7 +33,7 @@ impl<T> Mutex<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        while self
+        if self
             .state
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
@@ -46,9 +47,11 @@ impl<T> Mutex<T> {
     }
 
     pub fn unlock(&self) {
-        let s = self.state.swap(0, Ordering::AcqRel);
         // If state was = 2, we know other threads are waiting, wake one up
-        if s == 2 {
+        let tid = thread::current().id();
+        println!("thread {:?}: unlocking", tid);
+        if self.state.swap(0, Ordering::Release) == 2 {
+            println!("thread {:?}: waking one", tid);
             wake_one(&self.state)
         }
     }
@@ -77,7 +80,8 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 /// Dropping guard -> unlocks mutex
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.lock.unlock()
+        self.lock.unlock();
+        println!("thread: {:?}, dropping lock ", std::thread::current().id());
     }
 }
 
@@ -87,15 +91,21 @@ mod tests {
 
     use super::Mutex;
 
-    #[test] // TODO: Fix what appears to be a deadlock
+    #[test]
     fn to_1000000() {
         println!("running mutex test");
         let mutex: &'static _ = Box::leak(Box::new(Mutex::new(0)));
         let mut threads = Vec::new();
         for _ in 0..10 {
             let t = thread::spawn(|| {
-                for _ in 0..10 {
+                for _ in 0..10000 {
+                    println!(
+                        "thread: {:?}, attempting to acquire lock. state: {:?}",
+                        std::thread::current().id(),
+                        mutex.state
+                    );
                     let mut guard = mutex.lock();
+                    println!("thread: {:?}, currently has lock", thread::current().id());
                     *guard += 1
                 }
             });
