@@ -7,6 +7,8 @@ use std::{
 
 use atomic_wait::{wait, wake_one};
 
+const SPIN_LOCK_N: u32 = 100;
+
 pub struct Mutex<T> {
     /// 0 - Unlocked
     /// 1 - Locked
@@ -38,6 +40,18 @@ impl<T> Mutex<T> {
             .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
             .is_err()
         {
+            // Spin lock before Syscall,
+            // Great for situations where lock is not held for long
+            for _ in 0..SPIN_LOCK_N {
+                if self
+                    .state
+                    .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                    .is_ok()
+                {
+                    return MutexGuard { lock: self };
+                }
+            }
+
             while self.state.swap(2, Ordering::Acquire) != 0 {
                 wait(&self.state, 2)
             }
@@ -92,7 +106,7 @@ mod tests {
     use super::Mutex;
 
     #[test]
-    fn to_1000000() {
+    fn to_100000() {
         println!("running mutex test");
         let mutex: &'static _ = Box::leak(Box::new(Mutex::new(0)));
         let mut threads = Vec::new();

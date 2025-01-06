@@ -1,7 +1,6 @@
 use std::thread;
 
 mod lib;
-
 use lib::spin_lock::SpinLock;
 
 fn main() {
