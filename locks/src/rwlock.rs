@@ -21,7 +21,18 @@ pub struct RwLock<T> {
     writer_beacon: AtomicU32,
 }
 
+/// Sync for RwLock because we want the rwlock to be shared amongst threads,
+/// where T: Send + Sync - because some threads might only have read access hence sync, while writer threads will have exclusive access hence send?
+unsafe impl<T> Sync for RwLock<T> where T: Send + Sync {}
+
 impl<T> RwLock<T> {
+    pub fn new(value: T) -> Self {
+        Self {
+            state: AtomicU32::new(0),
+            value: UnsafeCell::new(value),
+            writer_beacon: AtomicU32::new(0),
+        }
+    }
     fn read(&self) -> ReadGuard<T> {
         // NOTE: If concerned that state may change between the load + processing operations as the function is not entirely atomic
         // CAS operation after the state.load() addresses the above concerns
@@ -121,6 +132,19 @@ impl<T> Drop for WriteGuard<'_, T> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
+    use super::*;
+
+    // Testing points:
+    // - Writer starvation: Ensure that when writers are frequently requesting access, they don't prevent readers from accessing the lock indefinitely.
+
+    // - Multiple readers: Ensure that multiple readers can access the lock concurrently without blocking each other.
+
+    // - Writer can acquire the lock when no readers/writers are present: Ensure that the writer can acquire the lock if there are no active readers or writers.
+
+    // - Exclusivity of writer lock: Ensure that writers are exclusive; no readers can access the lock while a writer holds it.
+
     #[test]
-    fn rwtest() {}
+    fn test() {}
 }
