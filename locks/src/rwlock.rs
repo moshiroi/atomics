@@ -14,28 +14,30 @@ pub struct RwLock<T> {
 
 impl<T> RwLock<T> {
     fn read(&self) -> ReadGuard<T> {
-        // NOTE: Concerned that state may change between the load + processing operations.
-        // Not entirely atomic
-
+        // NOTE: If concerned that state may change between the load + processing operations as the function is not entirely atomic
         // CAS operation after the state.load() addresses the above concerns
         let mut s = self.state.load(Ordering::Acquire);
 
         loop {
-            if s < u32::MAX {
-                assert_ne!(s, u32::MAX - 1, "Too many readers");
+            // u32::MAX is odd, so won't trigger here
+            if s % 2 == 0 {
+                assert_ne!(s, u32::MAX - 2, "Too many readers");
 
                 match self
                     .state
-                    .compare_exchange(s, s + 1, Ordering::Acquire, Ordering::Relaxed)
+                    .compare_exchange(s, s + 2, Ordering::Acquire, Ordering::Relaxed)
                 {
                     Ok(_) => return ReadGuard { lock: self },
                     Err(e) => s = e,
                 }
+            }
 
-                if s == u32::MAX {
-                    wait(&self.state, u32::MAX);
-                    s = self.state.load(Ordering::Acquire);
-                }
+            // Captures the following cases:
+            // 1. Currently write locked as u32::Max is odd,
+            // 2. If there are any waiting writers
+            if s % 2 == 1 {
+                wait(&self.state, u32::MAX);
+                s = self.state.load(Ordering::Acquire);
             }
         }
     }
@@ -69,8 +71,9 @@ impl<'a, T> Deref for ReadGuard<'a, T> {
 
 impl<T> Drop for ReadGuard<'_, T> {
     fn drop(&mut self) {
-        if self.lock.state.fetch_sub(1, Ordering::Acquire) == 1 {
-            // Wake a potential waiting writer
+        // Decrementing from 3 -> 1, indicates there is a waiting writer
+        if self.lock.state.fetch_sub(2, Ordering::Acquire) == 3 {
+            // Wake writer
             self.lock.writer_beacon.fetch_add(1, Ordering::Release);
             wake_one(&self.lock.writer_beacon);
         }
