@@ -7,8 +7,17 @@ use std::{
 use atomic_wait::{wait, wake_all, wake_one};
 
 pub struct RwLock<T> {
+    /// Represents the state of the lock
+    /// 0 -> Lock is free from writers + readers
+    /// 0 < N < u32::MAX:
+    ///     - N is even -> Lock has N/2 Readers
+    ///     - N is odd -> Lock has writer(s) waiting + (N-1)/2 readers
+    /// u32::MAX -> Lock is writer locked
     state: AtomicU32,
+    /// Value lock is holding
     value: UnsafeCell<T>,
+    /// Atomic value for writers to listen on, increment to wake waiting writers
+    /// Used to separately wake up writers, allowing us to avoid writer starvation
     writer_beacon: AtomicU32,
 }
 
