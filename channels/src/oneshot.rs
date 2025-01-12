@@ -1,6 +1,5 @@
 use std::{
     cell::UnsafeCell,
-    fmt::Display,
     mem::MaybeUninit,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -93,7 +92,7 @@ mod tests {
             println!("message is: {message}");
         });
 
-        thread::sleep(Duration::from_millis(5000));
+        thread::sleep(Duration::from_millis(500));
 
         let writer_thread = thread::spawn(move || {
             writer.send("It's working".to_string());

@@ -1,1 +1,1 @@
-workspace = { members = [ "channels","locks"] }
+workspace = { members = [ "arc", "channels","locks"] }
